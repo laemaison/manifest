@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#D9D3C0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Manifest">
+<title>Manifest</title>
+<style>
+  html,body{margin:0;padding:0;background:#D9D3C0;-webkit-text-size-adjust:100%}
+  #root{min-height:100vh}
+  .boot{font-family:system-ui,sans-serif;color:#6E6A5C;text-align:center;padding-top:80px;font-size:15px}
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"><div class="boot">Opening the manifest…</div></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo } = React;
+
+/* ============================================================
+   MANIFEST — two trip types, questions that change the list
+   ============================================================ */
+
+const KEY = "manifest:trips:v2";
+
+const CATS = [
+  ["docs", "Documents & money"],
+  ["clothes", "Clothing"],
+  ["shoes", "Footwear"],
+  ["toiletries", "Toiletries"],
+  ["health", "Health kit"],
+  ["tech", "Tech & power"],
+  ["gear", "Gear"],
+  ["camp", "Camp & sleep"],
+  ["food", "Food & water"],
+  ["car", "Car"],
+  ["misc", "Everything else"],
+  ["carry", "Personal item"],
+  ["wear", "Wearing out"],
+  ["door", "Door check"],
+];
+const CAT_LABEL = Object.fromEntries(CATS);
+
+const TYPES = [
+  ["camp", "Camping"],
+  ["vac", "Vacation"],
+];
+const CLIMATES = [
+  ["hot", "Hot"],
+  ["mild", "Mild"],
+  ["cold", "Cold"],
+  ["wet", "Wet"],
+];
+const SLEEPS = [
+  ["tent", "Tent"],
+  ["rv", "Camper or RV"],
+  ["cabin", "Cabin"],
+];
+const TRAVELS = [
+  ["drive", "Driving"],
+  ["fly", "Flying"],
+];
+const BAGS = [
+  ["carry", "Carry-on only"],
+  ["checked", "Checked bag"],
+];
+const EVENTS = [
+  ["none", "Nothing"],
+  ["wedding", "A wedding"],
+  ["work", "A work event"],
+  ["show", "A concert or show"],
+];
+
+const LABEL = (list, id) => (list.find((x) => x[0] === id) || [0, ""])[1];
+
+/* ---------- generator ---------- */
+
+function nightsBetween(a, b) {
+  if (!a || !b) return 3;
+  const ms = new Date(b + "T00:00:00") - new Date(a + "T00:00:00");
+  const n = Math.round(ms / 86400000);
+  return isNaN(n) || n < 0 ? 3 : n;
+}
+
+function effectiveBag(trip) {
+  if ((trip.type || "vac") === "camp") return "car";
+  if (trip.travel === "fly") return trip.bag === "carry" ? "carry" : "checked";
+  return "car";
+}
+
+function buildItems(trip) {
+  const nights = Math.max(1, trip.nights || 1);
+  const days = nights + 1;
+  const type = trip.type || "vac";
+  const camping = type === "camp";
+  const climate = trip.climate || "mild";
+  const fly = !camping && trip.travel === "fly";
+  const bag = effectiveBag(trip);
+  const laundry = !!trip.laundry;
+  const formal = Math.max(
+    parseInt(trip.formalNights, 10) || 0,
+    trip.event === "wedding" ? 1 : 0
+  );
+  const event = trip.event || "none";
+  const out = [];
+  const add = (name, cat, qty = 1, extra = {}) =>
+    out.push({ name, cat, qty: Math.max(1, qty), ...extra });
+  const liq = { liquid: true };
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+  const tops = laundry ? clamp(nights, 2, 5) : clamp(nights + 1, 2, 10);
+  const undies = laundry ? clamp(nights + 1, 3, 6) : clamp(nights + 1, 3, 12);
+  const bottoms = clamp(Math.ceil(days / 3), 1, 4);
+
+  /* ---------- always ---------- */
+  add("Photo ID or driver's license", "docs");
+  add("Insurance card", "docs");
+  add("Cash for tips and parking", "docs");
+  add("Reservations saved offline", "docs");
+
+  add("Tops", "clothes", tops);
+  add("Pants or shorts", "clothes", bottoms);
+  add("Undies", "clothes", undies);
+  add("Socks", "clothes", undies);
+  add("Pjs", "clothes", nights <= 3 ? 1 : 2);
+  add("Laundry or dirty-clothes bag", "clothes");
+  if (laundry) add("Detergent pods", "clothes", 3, { note: "Laundry on site" });
+  if (nights >= 3) add("Second pair of shoes", "shoes");
+
+  add("Toothbrush", "toiletries");
+  add("Toothpaste", "toiletries", 1, liq);
+  add("Mouthwash", "toiletries", 1, liq);
+  add("Flossers", "toiletries");
+  add("Nightguards", "toiletries");
+  add("Nightguard cleaning tablets", "toiletries", 1, { note: "Count one per night" });
+  add("Portable waterpik", "toiletries");
+  add("Electric razor", "toiletries");
+  add("Deodorant", "toiletries");
+  add("Hair brushes", "toiletries");
+  add("Hair products", "toiletries", 1, liq);
+  add("Mini cologne", "toiletries", 1, liq);
+  add("Moisturizer", "toiletries", 1, liq);
+  add("Face wash", "toiletries", 1, liq);
+  add("Nasal sprays", "toiletries", 1, liq);
+  add("Contact case", "toiletries");
+  add("Contact solution", "toiletries", 1, liq);
+  add("Glasses", "toiletries");
+  add("Earplugs", "toiletries");
+
+  add("Meds: morning, afternoon, night", "health", 1, { note: "Pack a few extra days" });
+  add("Pain reliever", "health");
+  add("Bandages and antiseptic wipes", "health");
+  add("Antihistamine", "health");
+  add("Stomach remedy", "health");
+  add("Hand sanitizer", "health", 1, liq);
+
+  add("Phone charger", "tech");
+  add("USB-C cables", "tech", 2);
+  add("Watch charger", "tech");
+  add("Toothbrush charger", "tech");
+  add("Waterpik charger", "tech");
+  add("Battery pack", "tech");
+  add("Multi-port wall plug", "tech", 1, { note: "One outlet, four devices" });
+
+  add("Kindle", "carry");
+  add("Kindle stand", "carry");
+  add("Ear buds", "carry");
+  add("Eye mask", "carry");
+  add("Sunglasses", "carry");
+  add("Wallet with ID", "carry");
+  add("Emergency meds", "carry");
+  add("Liquid toiletries bag", "carry");
+  add("Water bottle", "carry");
+  add("Snacks", "carry");
+
+  add("Outfit picked out", "wear");
+  add("Shoes picked out", "wear");
+  add("Wedding band", "wear");
+  add("Watch", "wear");
+  add("Hoodie or jacket", "wear");
+
+  /* ---------- weather ---------- */
+  if (climate === "hot") {
+    add("Sun hat", "clothes");
+    add("Lightweight long sleeve", "clothes");
+    add("Sunscreen", "toiletries", 1, liq);
+    add("Lip balm with SPF", "toiletries");
+    add("Electrolyte packets", "health", nights);
+  }
+  if (climate === "cold") {
+    add("Insulated jacket", "clothes");
+    add("Thermal base layers", "clothes", clamp(nights, 1, 3));
+    add("Beanie", "clothes");
+    add("Gloves", "clothes");
+    add("Neck gaiter or scarf", "clothes");
+    add("Wool socks", "clothes", clamp(nights, 2, 6));
+    add("Warm boots", "shoes");
+    add("Hand warmers", "gear", 4);
+    add("Lip balm", "toiletries");
+    add("Lotion for dry skin", "toiletries", 1, liq);
+  }
+  if (climate === "wet") {
+    add("Rain jacket", "clothes");
+    add("Packable umbrella", "gear");
+    add("Dry bag", "gear");
+    add("Extra socks", "clothes", 3);
+    add("Waterproof shoes", "shoes");
+  }
+  if (climate === "mild") add("Layer for evenings", "clothes");
+
+  /* ---------- camping ---------- */
+  if (camping) {
+    const sleep = trip.sleep || "tent";
+    if (sleep === "tent") {
+      add("Tent, poles, stakes", "camp");
+      add("Footprint or ground tarp", "camp");
+      add("Mallet", "camp");
+      add("Sleeping bag", "camp");
+      add("Sleeping pad", "camp");
+      add("Camp pillow", "camp");
+    }
+    if (sleep === "rv") {
+      add("Leveling blocks and chocks", "camp");
+      add("Potable water hose", "camp");
+      add("Sewer hose and gloves", "camp");
+      add("Surge protector and power adapter", "camp");
+      add("Tank treatment", "camp");
+      add("Bedding and pillows", "camp");
+    }
+    if (sleep === "cabin") {
+      add("Bedding or sleeping bag", "camp");
+      add("Pillows", "camp");
+      add("Bath towels", "camp", 2);
+      add("Dish towels", "camp", 2);
+    }
+
+    add("Headlamps and spare batteries", "camp", 2);
+    add("Lantern", "camp");
+    add("Camp chairs", "camp", 2);
+    add("Firewood or fire starter", "camp");
+    add("Lighter and matches", "camp");
+    add("Trash and recycling bags", "camp");
+    add("Toilet paper", "camp");
+    add("Bin for the gear", "camp");
+    add("Bug spray", "gear", 1, liq);
+    add("Sunscreen", "toiletries", 1, liq);
+    add("Multi-tool", "gear");
+    add("Paracord", "gear");
+    add("Duct tape", "gear");
+    add("Work gloves", "gear");
+    add("Hatchet or folding saw", "gear");
+    add("Water jug", "food");
+    add("Camp shoes or slides", "shoes");
+
+    if (trip.showers) {
+      add("Shower shoes", "shoes");
+      add("Quick-dry towel", "gear");
+      add("Shower caddy", "toiletries");
+      add("Shampoo and body wash", "toiletries", 1, liq);
+    } else {
+      add("Body wipes", "toiletries");
+      add("Dry shampoo", "toiletries", 1, liq);
+    }
+
+    if (trip.cooking) {
+      add("Stove and fuel", "camp");
+      add("Cook pot and pan", "camp");
+      add("Utensils and spatula", "camp");
+      add("Plates, bowls, mugs", "camp", 2);
+      add("Knife and cutting board", "camp");
+      add("Dish soap, sponge, towel", "camp", 1, liq);
+      add("Wash bin", "camp");
+      add("Foil and zip bags", "camp");
+      add("Coffee setup", "camp");
+      add("Seasonings and oil", "food");
+      add("Oven mitt", "camp");
+      add("Meals planned by day", "food", nights);
+    }
+  }
+
+  /* ---------- getting there ---------- */
+  const driving = camping || (!camping && trip.travel !== "fly");
+  if (driving) {
+    add("Phone mount", "car");
+    add("Car charger", "car");
+    add("Offline maps downloaded", "car");
+    add("Playlists and podcasts downloaded", "car");
+    add("Paper towels and wipes", "car");
+    add("Trash bag for the car", "car");
+    add("Tire gauge and jumper cables", "car");
+    if (climate === "cold") add("Ice scraper and blanket", "car");
+    add("Cooler with ice", "food");
+    add("Road snacks and drinks", "food");
+    add("Reusable cups", "food", 2);
+  }
+  if (fly) {
+    add("Boarding passes saved offline", "docs");
+    add("Neck pillow", "carry");
+    add("Downloads for the flight", "carry");
+    add("Empty bottle to fill after security", "carry");
+    if (bag === "carry") {
+      add("Quart bag for liquids", "carry", 1, { note: "Nothing over 3.4 oz or 100 ml" });
+      add("Valuables in the personal item", "carry");
+    } else {
+      add("Luggage tag with a phone number", "docs");
+      add("One change of clothes in the carry-on", "carry");
+    }
+  }
+
+  /* ---------- what you'll actually do ---------- */
+  if (trip.hiking) {
+    add("Daypack", "gear");
+    add("Hydration bladder or bottles", "gear", 2);
+    add("Trail snacks", "food", days * 2);
+    add("Trail map downloaded offline", "gear");
+    add("Headlamp", "gear");
+    add("Rain shell", "clothes");
+    add("Trekking poles", "gear");
+    add("Blister kit", "health");
+    add("Bug spray", "gear", 1, liq);
+    add("Hiking boots", "shoes");
+    add("Wool socks", "clothes", clamp(days, 2, 6));
+  }
+  if (trip.water) {
+    add("Swimsuit", "clothes", 2);
+    add("Quick-dry towel", "gear");
+    add("Water shoes or sandals", "shoes");
+    add("Dry bag", "gear");
+    add("Waterproof phone pouch", "gear");
+    add("Sunscreen", "toiletries", 1, liq);
+    add("Aloe or after-sun", "toiletries", 1, liq);
+  }
+  if (trip.dog) {
+    add("Dog food and bowls", "food", days);
+    add("Leash and harness", "gear");
+    add("Waste bags", "gear");
+    add("Bed or blanket", "gear");
+    add("Vaccination record", "docs");
+    add("Towel for muddy paws", "gear");
+    add("Dog meds and tick prevention", "health");
+  }
+
+  /* ---------- formal nights ---------- */
+  if (formal > 0) {
+    add("Going out outfit", "clothes", formal, {
+      note: formal > 1 ? formal + " nights to dress for" : "Try it on before it goes in the bag",
+    });
+    add("Undergarments for that outfit", "clothes", formal);
+    add("Dress socks", "clothes", formal);
+    add("Dress shoes", "shoes");
+    add("Wrinkle spray", "gear", 1, liq);
+    add("Lint roller", "gear");
+    add("Stain remover pen", "gear");
+    if (formal >= 2) add("Garment bag", "gear");
+  }
+
+  /* ---------- the event ---------- */
+  if (event === "wedding") {
+    add("Gift or card, with the envelope", "misc");
+    add("Cash for the bar and valet", "docs");
+    add("Invitation, schedule, venue address", "docs");
+    add("Rehearsal or welcome party outfit", "clothes");
+    add("Brunch or day-after outfit", "clothes");
+    add("Flats for dancing", "shoes");
+    add("Sewing kit and safety pins", "gear");
+    add("Double-sided fashion tape", "gear");
+    add("Heel protectors", "gear", 1, { note: "If the ceremony is on grass" });
+    add("Blister kit", "health");
+    add("Antacid", "health");
+    add("Deodorant wipes", "toiletries");
+  }
+  if (event === "work") {
+    add("Laptop and charger", "tech");
+    add("Notebook and pen", "misc");
+    add("Badge or lanyard", "docs");
+    add("Business cards", "misc");
+    add("Blazer", "clothes");
+  }
+  if (event === "show") {
+    add("Tickets on the phone and printed", "docs");
+    add("Cash in small bills", "docs");
+    add("Poncho", "gear");
+    add("Folding chair or blanket", "gear");
+  }
+
+  /* ---------- door ---------- */
+  add("Phone, wallet, keys", "door");
+  add("Chargers unplugged from the wall", "door");
+  add("Trash out, fridge cleared", "door");
+  add("Thermostat set", "door");
+  add("Doors and windows locked", "door");
+
+  /* ---------- dedupe ---------- */
+  const seen = new Map();
+  for (const it of out) {
+    const k = it.name.toLowerCase();
+    if (seen.has(k)) {
+      const prev = seen.get(k);
+      prev.qty = Math.max(prev.qty, it.qty);
+      prev.note = prev.note || it.note;
+      prev.liquid = prev.liquid || it.liquid;
+    } else seen.set(k, { ...it });
+  }
+  return [...seen.values()].map((it, n) => ({
+    id: "a" + n + "-" + Math.random().toString(36).slice(2, 7),
+    packed: false,
+    source: "auto",
+    ...it,
+  }));
+}
+
+function mergeItems(oldItems, freshItems) {
+  const oldByName = new Map(oldItems.map((i) => [i.name.toLowerCase(), i]));
+  const freshNames = new Set(freshItems.map((i) => i.name.toLowerCase()));
+  const merged = freshItems.map((f) => {
+    const prev = oldByName.get(f.name.toLowerCase());
+    return prev
+      ? { ...f, id: prev.id, packed: prev.packed, qty: prev.edited ? prev.qty : f.qty, edited: prev.edited }
+      : f;
+  });
+  const kept = oldItems.filter(
+    (i) => i.source !== "auto" && !freshNames.has(i.name.toLowerCase())
+  );
+  return [...merged, ...kept];
+}
+
+/* ---------- storage ---------- */
+
+const IN_CLAUDE = typeof window !== "undefined" && !!window.storage;
+
+async function loadTrips() {
+  try {
+    if (IN_CLAUDE) {
+      const r = await window.storage.get(KEY);
+      return r && r.value ? JSON.parse(r.value) : [];
+    }
+    const raw = localStorage.getItem(KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+async function saveTrips(trips) {
+  try {
+    if (IN_CLAUDE) {
+      await window.storage.set(KEY, JSON.stringify(trips));
+      return true;
+    }
+    localStorage.setItem(KEY, JSON.stringify(trips));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function exportTrips(trips) {
+  const blob = new Blob([JSON.stringify(trips, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "manifest-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importTrips(file, done) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const data = JSON.parse(r.result);
+      if (Array.isArray(data)) done(data);
+    } catch (e) {
+      /* not a backup file */
+    }
+  };
+  r.readAsText(file);
+}
+
+function mergeTripSets(current, incoming) {
+  const byId = new Map(current.map((t) => [t.id, t]));
+  for (const t of incoming) if (t && t.id) byId.set(t.id, t);
+  return [...byId.values()];
+}
+
+/* ---------- pieces ---------- */
+
+const Pad = (n) => String(n).padStart(2, "0");
+
+function Chip({ on, children, onClick }) {
+  return (
+    <button className={"chip" + (on ? " on" : "")} onClick={onClick} type="button">
+      {children}
+    </button>
+  );
+}
+
+function Switch({ on, onClick, label, hint }) {
+  return (
+    <button className={"toggle" + (on ? " on" : "")} onClick={onClick} type="button">
+      <span className="tbox">{on ? "✓" : ""}</span>
+      <span>
+        {label}
+        {hint && <em>{hint}</em>}
+      </span>
+    </button>
+  );
+}
+
+/* ============================================================
+   Trip setup
+   ============================================================ */
+
+function TripSetup({ initial, onSave, onCancel }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [name, setName] = useState(initial?.name || "");
+  const [start, setStart] = useState(initial?.start || today);
+  const [end, setEnd] = useState(initial?.end || "");
+  const [type, setType] = useState(initial?.type || "vac");
+  const [climate, setClimate] = useState(initial?.climate || "mild");
+  const [laundry, setLaundry] = useState(!!initial?.laundry);
+
+  const [sleep, setSleep] = useState(initial?.sleep || "tent");
+  const [cooking, setCooking] = useState(initial?.cooking ?? true);
+  const [showers, setShowers] = useState(initial?.showers ?? true);
+
+  const [travel, setTravel] = useState(initial?.travel || "drive");
+  const [bag, setBag] = useState(initial?.bag || "checked");
+  const [formalNights, setFormalNights] = useState(initial?.formalNights || 0);
+  const [event, setEvent] = useState(initial?.event || "none");
+
+  const [hiking, setHiking] = useState(!!initial?.hiking);
+  const [water, setWater] = useState(!!initial?.water);
+  const [dog, setDog] = useState(!!initial?.dog);
+
+  const nights = end ? nightsBetween(start, end) : initial?.nights || 3;
+  const camping = type === "camp";
+
+  const save = () =>
+    onSave({
+      name: name.trim() || "Untitled trip",
+      start,
+      end,
+      nights,
+      type,
+      climate,
+      laundry,
+      sleep,
+      cooking,
+      showers,
+      travel,
+      bag,
+      formalNights,
+      event,
+      hiking,
+      water,
+      dog,
+    });
+
+  return (
+    <div className="pane">
+      <div className="eyebrow">{initial ? "Trip settings" : "New trip"}</div>
+      <h1 className="h1">Where are you going?</h1>
+
+      <label className="lab">Destination</label>
+      <input
+        className="inp"
+        value={name}
+        placeholder="Pictured Rocks, MI"
+        onChange={(e) => setName(e.target.value)}
+      />
+
+      <div className="row2">
+        <div>
+          <label className="lab">Leave</label>
+          <input className="inp" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+        </div>
+        <div>
+          <label className="lab">Return</label>
+          <input className="inp" type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
+        </div>
+      </div>
+      <div className="nights">
+        <span className="mono big">{Pad(nights)}</span>
+        <span className="nightslab">{nights === 1 ? "night" : "nights"} away</span>
+      </div>
+
+      <label className="lab">What kind of trip</label>
+      <div className="typerow">
+        {TYPES.map(([id, label]) => (
+          <button
+            key={id}
+            className={"typebtn" + (type === id ? " on" : "")}
+            onClick={() => setType(id)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {camping ? (
+        <div className="branch">
+          <label className="lab">Sleeping in</label>
+          <div className="chips">
+            {SLEEPS.map(([id, label]) => (
+              <Chip key={id} on={sleep === id} onClick={() => setSleep(id)}>{label}</Chip>
+            ))}
+          </div>
+          <Switch on={cooking} onClick={() => setCooking((v) => !v)}
+            label="Cooking at camp" hint="Adds the whole camp kitchen" />
+          <Switch on={showers} onClick={() => setShowers((v) => !v)}
+            label="Showers on site" hint="Off swaps in wipes and dry shampoo" />
+        </div>
+      ) : (
+        <div className="branch">
+          <label className="lab">Getting there</label>
+          <div className="chips">
+            {TRAVELS.map(([id, label]) => (
+              <Chip key={id} on={travel === id} onClick={() => setTravel(id)}>{label}</Chip>
+            ))}
+          </div>
+          {travel === "fly" && (
+            <>
+              <label className="lab">Bag</label>
+              <div className="chips">
+                {BAGS.map(([id, label]) => (
+                  <Chip key={id} on={bag === id} onClick={() => setBag(id)}>{label}</Chip>
+                ))}
+              </div>
+            </>
+          )}
+
+          <label className="lab">Nights you need to dress up</label>
+          <div className="chips">
+            {[0, 1, 2, 3, 4].map((n) => (
+              <Chip key={n} on={formalNights === n} onClick={() => setFormalNights(n)}>
+                {n === 4 ? "4+" : n}
+              </Chip>
+            ))}
+          </div>
+
+          <label className="lab">Anything on the calendar</label>
+          <div className="chips">
+            {EVENTS.map(([id, label]) => (
+              <Chip key={id} on={event === id} onClick={() => setEvent(id)}>{label}</Chip>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <label className="lab">Weather you expect</label>
+      <div className="chips">
+        {CLIMATES.map(([id, label]) => (
+          <Chip key={id} on={climate === id} onClick={() => setClimate(id)}>{label}</Chip>
+        ))}
+      </div>
+
+      <label className="lab">Also on this trip</label>
+      <Switch on={hiking} onClick={() => setHiking((v) => !v)}
+        label="Hiking or trails" hint="Daypack, boots, blister kit" />
+      <Switch on={water} onClick={() => setWater((v) => !v)}
+        label="Beach, lake, or pool" hint="Swimsuits, dry bag, water shoes" />
+      <Switch on={dog} onClick={() => setDog((v) => !v)} label="The dog is coming" />
+      <Switch on={laundry} onClick={() => setLaundry((v) => !v)}
+        label="Laundry where I'm staying" hint="Cuts the clothing counts down" />
+
+      <div className="actions">
+        <button className="btn primary" onClick={save}>
+          {initial ? "Update list" : "Build the list"}
+        </button>
+        {onCancel && <button className="btn ghost" onClick={onCancel}>Cancel</button>}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   Packing list
+   ============================================================ */
+
+function ItemRow({ item, carryOn, onToggle, onQty, onRemove }) {
+  return (
+    <div className={"item" + (item.packed ? " packed" : "")}>
+      <button className="box" onClick={() => onToggle(item.id)} aria-pressed={item.packed}>
+        <span>{item.packed ? "✓" : ""}</span>
+      </button>
+      <div className="itembody" onClick={() => onToggle(item.id)}>
+        <div className="itemname">
+          {item.name}
+          {item.source === "ai" && <span className="tag">local</span>}
+          {item.source === "you" && <span className="tag">yours</span>}
+        </div>
+        {(item.note || (carryOn && item.liquid)) && (
+          <div className="itemnote">
+            {carryOn && item.liquid ? "3.4 oz / 100 ml max. " : ""}
+            {item.note || ""}
+          </div>
+        )}
+      </div>
+      <div className="qty">
+        <button onClick={() => onQty(item.id, -1)} aria-label="One fewer">–</button>
+        <span className="mono">{Pad(item.qty)}</span>
+        <button onClick={() => onQty(item.id, 1)} aria-label="One more">+</button>
+      </div>
+      <button className="kill" onClick={() => onRemove(item.id)} aria-label={"Remove " + item.name}>×</button>
+    </div>
+  );
+}
+
+function PackingList({ trip, onChange, onEdit, onExit }) {
+  const [filter, setFilter] = useState("all");
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newCat, setNewCat] = useState("misc");
+  const [collapsed, setCollapsed] = useState({});
+  const [ai, setAi] = useState({ state: "idle", msg: "" });
+  const [copied, setCopied] = useState(false);
+
+  const items = trip.items;
+  const total = items.length;
+  const done = items.filter((i) => i.packed).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const carryOn = effectiveBag(trip) === "carry";
+
+  const set = (next) => onChange({ ...trip, items: next });
+  const toggle = (id) => set(items.map((i) => (i.id === id ? { ...i, packed: !i.packed } : i)));
+  const qty = (id, d) =>
+    set(items.map((i) => (i.id === id ? { ...i, qty: Math.max(1, i.qty + d), edited: true } : i)));
+  const remove = (id) => set(items.filter((i) => i.id !== id));
+
+  const addItem = () => {
+    const n = newName.trim();
+    if (!n) return;
+    set([...items, { id: "u" + Date.now(), name: n, cat: newCat, qty: 1, packed: false, source: "you" }]);
+    setNewName("");
+  };
+
+  const visible = useMemo(() => {
+    if (filter === "left") return items.filter((i) => !i.packed);
+    if (filter === "liquid") return items.filter((i) => i.liquid);
+    return items;
+  }, [items, filter]);
+
+  const grouped = CATS.map(([id, label]) => [id, label, visible.filter((i) => i.cat === id)])
+    .filter((g) => g[2].length);
+
+  const meta = [
+    LABEL(TYPES, trip.type || "vac"),
+    trip.type === "camp" ? LABEL(SLEEPS, trip.sleep || "tent") : LABEL(TRAVELS, trip.travel || "drive"),
+    LABEL(CLIMATES, trip.climate || "mild"),
+    trip.laundry ? "Laundry" : "",
+    trip.formalNights ? trip.formalNights + " dress-up" : "",
+  ].filter(Boolean);
+
+  const copyList = async () => {
+    const text =
+      (trip.name || "Trip").toUpperCase() + "\n" + trip.nights + " nights\n\n" +
+      CATS.map(([id, label]) => {
+        const rows = items.filter((i) => i.cat === id);
+        if (!rows.length) return "";
+        return label.toUpperCase() + "\n" +
+          rows.map((i) => (i.packed ? "[x] " : "[ ] ") + i.name + (i.qty > 1 ? " x" + i.qty : "")).join("\n") + "\n";
+      }).filter(Boolean).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch (e) {
+      setCopied(false);
+    }
+  };
+
+  const tailor = async () => {
+    setAi({ state: "run", msg: "Checking what this place asks for" });
+    const doing = [
+      trip.type === "camp" ? "camping in a " + LABEL(SLEEPS, trip.sleep || "tent") : "vacation",
+      trip.hiking ? "hiking" : "",
+      trip.water ? "swimming" : "",
+      trip.event && trip.event !== "none" ? LABEL(EVENTS, trip.event) : "",
+    ].filter(Boolean).join(", ");
+    const known = items.map((i) => i.name).join("; ");
+    const prompt =
+      "Search the web for current conditions, seasonal hazards, and local rules for this trip, then return packing items a generic list would miss.\n\n" +
+      "Destination: " + trip.name + "\n" +
+      "Dates: " + trip.start + " to " + (trip.end || "unknown") + " (" + trip.nights + " nights)\n" +
+      "Doing: " + doing + "\n" +
+      "Already on the list: " + known + "\n\n" +
+      "Return between 4 and 10 items specific to this destination and season: terrain, weather, bugs, water, altitude, permits, passes, local rules. Skip anything already on the list and skip generic travel items.\n" +
+      "Reply with JSON only, no prose and no markdown fences: " +
+      '[{"name":"...","cat":"one of docs|clothes|shoes|toiletries|health|tech|gear|camp|food|car|misc|carry","qty":1,"note":"under 10 words, why"}]';
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }],
+          tools: [{ type: "web_search_20250305", name: "web_search" }],
+        }),
+      });
+      const data = await res.json();
+      const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+      const s = text.indexOf("[");
+      const e = text.lastIndexOf("]");
+      if (s === -1 || e === -1) throw new Error("no list");
+      const parsed = JSON.parse(text.slice(s, e + 1));
+      const have = new Set(items.map((i) => i.name.toLowerCase()));
+      const fresh = parsed
+        .filter((p) => p && p.name && !have.has(String(p.name).toLowerCase()))
+        .slice(0, 10)
+        .map((p, n) => ({
+          id: "ai" + Date.now() + n,
+          name: String(p.name).slice(0, 60),
+          cat: CAT_LABEL[p.cat] ? p.cat : "misc",
+          qty: Math.max(1, parseInt(p.qty, 10) || 1),
+          note: p.note ? String(p.note).slice(0, 80) : "",
+          packed: false,
+          source: "ai",
+        }));
+      if (!fresh.length) setAi({ state: "done", msg: "Nothing to add, the list already covers it" });
+      else {
+        set([...items, ...fresh]);
+        setAi({ state: "done", msg: "Added " + fresh.length + " items for " + trip.name });
+      }
+    } catch (err) {
+      setAi({ state: "err", msg: "That lookup did not come back. Try again in a moment." });
+    }
+  };
+
+  return (
+    <div className="pane">
+      <div className="ticket">
+        {pct === 100 && <div className="stamp">All stowed</div>}
+        <div className="tick-eyebrow">Packing manifest</div>
+        <h1 className="dest">{trip.name}</h1>
+        <div className="tick-meta">
+          <span><b className="mono">{Pad(trip.nights)}</b> nights</span>
+          {meta.map((m) => <span key={m}>{m}</span>)}
+        </div>
+        <div className="bar"><div className="fill" style={{ width: pct + "%" }} /></div>
+        <div className="tally mono">
+          {Pad(done)} / {Pad(total)} stowed<span>{total - done} to go</span>
+        </div>
+        <div className="perf" />
+      </div>
+
+      <div className="chips tight">
+        <Chip on={filter === "all"} onClick={() => setFilter("all")}>All</Chip>
+        <Chip on={filter === "left"} onClick={() => setFilter("left")}>Still out</Chip>
+        {carryOn && <Chip on={filter === "liquid"} onClick={() => setFilter("liquid")}>Liquids</Chip>}
+      </div>
+
+      {grouped.map(([id, label, rows]) => {
+        const packed = rows.filter((r) => r.packed).length;
+        const shut = collapsed[id];
+        return (
+          <section key={id} className="cat">
+            <button className="cathead" onClick={() => setCollapsed((c) => ({ ...c, [id]: !c[id] }))}>
+              <span className="catname">{label}</span>
+              <span className="leader" />
+              <span className="mono catcount">{Pad(packed)}/{Pad(rows.length)}</span>
+              <span className="caret">{shut ? "+" : "–"}</span>
+            </button>
+            {!shut && rows.map((it) => (
+              <ItemRow key={it.id} item={it} carryOn={carryOn}
+                onToggle={toggle} onQty={qty} onRemove={remove} />
+            ))}
+          </section>
+        );
+      })}
+
+      {!grouped.length && <div className="empty">Nothing left in this view. Switch back to All.</div>}
+
+      <div className="addbox">
+        {adding ? (
+          <>
+            <input className="inp" autoFocus value={newName}
+              placeholder="What else are you bringing?"
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addItem()} />
+            <select className="inp" value={newCat} onChange={(e) => setNewCat(e.target.value)}>
+              {CATS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </select>
+            <div className="actions">
+              <button className="btn primary" onClick={addItem}>Add item</button>
+              <button className="btn ghost" onClick={() => setAdding(false)}>Done</button>
+            </div>
+          </>
+        ) : (
+          <button className="btn wide" onClick={() => setAdding(true)}>+ Add your own item</button>
+        )}
+      </div>
+
+      {IN_CLAUDE && (
+        <div className="tailor">
+          <button className="btn wide brass" onClick={tailor} disabled={ai.state === "run"}>
+            {ai.state === "run" ? "Looking up " + trip.name + "…" : "Tailor to " + trip.name}
+          </button>
+          {ai.msg && <div className={"aimsg" + (ai.state === "err" ? " err" : "")}>{ai.msg}</div>}
+        </div>
+      )}
+
+      <div className="footer">
+        <button className="btn ghost" onClick={onExit}>All trips</button>
+        <button className="btn ghost" onClick={onEdit}>Trip settings</button>
+        <button className="btn ghost" onClick={copyList}>{copied ? "Copied" : "Copy list"}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   Root
+   ============================================================ */
+
+function App() {
+  const [trips, setTrips] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [view, setView] = useState("loading");
+  const [editing, setEditing] = useState(false);
+  const [saveState, setSaveState] = useState("ok");
+  const firstLoad = useRef(true);
+
+  useEffect(() => {
+    (async () => {
+      const t = await loadTrips();
+      if (t === null) setSaveState("none");
+      setTrips(t || []);
+      setView(t && t.length ? "trips" : "setup");
+      firstLoad.current = false;
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (firstLoad.current || view === "loading") return;
+    const h = setTimeout(async () => {
+      const ok = await saveTrips(trips);
+      setSaveState(ok ? "ok" : "none");
+    }, 400);
+    return () => clearTimeout(h);
+  }, [trips, view]);
+
+  const active = trips.find((t) => t.id === activeId);
+
+  const createTrip = (cfg) => {
+    const trip = { id: "t" + Date.now(), ...cfg, items: buildItems(cfg) };
+    setTrips((v) => [trip, ...v]);
+    setActiveId(trip.id);
+    setView("list");
+  };
+
+  const updateTrip = (cfg) => {
+    setTrips((v) =>
+      v.map((t) => (t.id === activeId ? { ...t, ...cfg, items: mergeItems(t.items, buildItems(cfg)) } : t))
+    );
+    setEditing(false);
+    setView("list");
+  };
+
+  const changeTrip = (next) => setTrips((v) => v.map((t) => (t.id === next.id ? next : t)));
+
+  const duplicate = (t) => {
+    const copy = {
+      ...t,
+      id: "t" + Date.now(),
+      name: t.name + " (again)",
+      items: t.items.map((i, n) => ({ ...i, packed: false, id: i.id + "c" + n })),
+    };
+    setTrips((v) => [copy, ...v]);
+  };
+
+  const removeTrip = (id) => setTrips((v) => v.filter((t) => t.id !== id));
+
+  return (
+    <div className="wrap">
+      <Styles />
+      {view === "loading" && <div className="pane loading">Opening the manifest…</div>}
+
+      {view === "setup" && (
+        <TripSetup onSave={createTrip} onCancel={trips.length ? () => setView("trips") : null} />
+      )}
+
+      {view === "list" && active && editing && (
+        <TripSetup initial={active} onSave={updateTrip} onCancel={() => setEditing(false)} />
+      )}
+
+      {view === "list" && active && !editing && (
+        <PackingList trip={active} onChange={changeTrip}
+          onEdit={() => setEditing(true)} onExit={() => setView("trips")} />
+      )}
+
+      {view === "trips" && (
+        <div className="pane">
+          <div className="eyebrow">Manifest</div>
+          <h1 className="h1">Your trips</h1>
+          {!trips.length && <div className="empty">No trips yet. Start one below.</div>}
+          {trips.map((t) => {
+            const done = t.items.filter((i) => i.packed).length;
+            return (
+              <div key={t.id} className="tripcard">
+                <button className="tripmain" onClick={() => { setActiveId(t.id); setEditing(false); setView("list"); }}>
+                  <span className="tripname">{t.name}</span>
+                  <span className="leader" />
+                  <span className="mono tripcount">{Pad(done)}/{Pad(t.items.length)}</span>
+                </button>
+                <div className="tripmeta">
+                  <span>{t.start}</span>
+                  <span>{t.nights} nights</span>
+                  <span>{LABEL(TYPES, t.type || "vac")}</span>
+                  <button onClick={() => duplicate(t)}>Copy</button>
+                  <button onClick={() => removeTrip(t.id)}>Delete</button>
+                </div>
+              </div>
+            );
+          })}
+          <div className="actions">
+            <button className="btn primary" onClick={() => setView("setup")}>Start a new trip</button>
+          </div>
+          <div className="backup">
+            <button className="btn ghost" onClick={() => exportTrips(trips)}>Save a backup</button>
+            <label className="btn ghost filelab">
+              Restore a backup
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={(e) => {
+                  const f = e.target.files && e.target.files[0];
+                  if (f) importTrips(f, (data) => setTrips((v) => mergeTripSets(v, data)));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {saveState === "none" && (
+            <div className="warn">Saving is off in this view, so the list lasts for this session only.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   Styles
+   ============================================================ */
+
+function Styles() {
+  return (
+    <style>{`
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+.wrap {
+  --ink:#1B2019;
+  --canvas:#D9D3C0;
+  --card:#F2EEE1;
+  --olive:#3E4A32;
+  --brass:#B8862B;
+  --rust:#8A3520;
+  --line:#B9B29C;
+  --dim:#6E6A5C;
+  background:var(--canvas);
+  color:var(--ink);
+  font-family:'Barlow',system-ui,sans-serif;
+  min-height:100vh;
+  padding:0 0 48px;
+}
+.wrap *{box-sizing:border-box}
+.pane{max-width:640px;margin:0 auto;padding:20px 16px 8px}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.loading{padding-top:80px;text-align:center;color:var(--dim)}
+
+.eyebrow{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.22em;
+  font-size:12px;font-weight:600;color:var(--olive);margin-bottom:2px}
+.h1{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.02em;
+  font-size:34px;line-height:1;font-weight:700;margin:0 0 20px}
+
+.lab{display:block;font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.16em;
+  font-size:12px;font-weight:600;color:var(--dim);margin:18px 0 6px}
+.inp{width:100%;background:var(--card);border:1px solid var(--line);border-radius:2px;
+  padding:11px 12px;font-family:'Barlow';font-size:16px;color:var(--ink);outline:none}
+.inp:focus{border-color:var(--olive);box-shadow:0 0 0 2px rgba(62,74,50,.18)}
+.row2{display:flex;gap:10px;margin-top:4px}
+.row2>div{flex:1}
+
+.nights{display:flex;align-items:baseline;gap:10px;margin-top:14px}
+.big{font-size:44px;font-weight:600;line-height:1;color:var(--olive)}
+.nightslab{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.18em;
+  font-size:13px;color:var(--dim)}
+
+.typerow{display:flex;gap:8px}
+.typebtn{flex:1;font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.14em;
+  font-size:16px;font-weight:700;padding:16px 8px;border:1px solid var(--line);
+  background:var(--card);color:var(--dim);border-radius:2px;cursor:pointer}
+.typebtn.on{background:var(--olive);border-color:var(--olive);color:#F2EEE1}
+
+.branch{border-left:2px solid var(--brass);padding-left:13px;margin-top:6px}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips.tight{margin:14px 0 6px}
+.chip{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.1em;font-size:13px;
+  font-weight:600;padding:7px 12px;border:1px solid var(--line);background:transparent;
+  color:var(--dim);border-radius:2px;cursor:pointer;transition:background .12s,color .12s}
+.chip.on{background:var(--olive);border-color:var(--olive);color:#F2EEE1}
+.chip:focus-visible,.btn:focus-visible,.box:focus-visible,.typebtn:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+.toggle{display:flex;gap:11px;align-items:flex-start;width:100%;text-align:left;margin-top:14px;
+  background:transparent;border:none;padding:0;cursor:pointer;font-family:'Barlow';font-size:15px;color:var(--ink)}
+.toggle em{display:block;font-style:normal;font-size:13px;color:var(--dim)}
+.tbox{width:22px;height:22px;flex:none;border:1px solid var(--line);background:var(--card);
+  display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--olive)}
+.toggle.on .tbox{background:var(--olive);color:#F2EEE1;border-color:var(--olive)}
+
+.actions{display:flex;gap:8px;margin:24px 0 8px}
+.btn{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.14em;font-size:14px;
+  font-weight:600;padding:12px 16px;border:1px solid var(--olive);background:transparent;
+  color:var(--olive);border-radius:2px;cursor:pointer}
+.btn.primary{background:var(--olive);color:#F2EEE1}
+.btn.ghost{border-color:var(--line);color:var(--dim)}
+.btn.wide{width:100%}
+.btn.brass{border-color:var(--brass);color:var(--brass)}
+.btn[disabled]{opacity:.5;cursor:default}
+
+.ticket{position:relative;background:var(--card);border:1px solid var(--line);border-bottom:none;
+  padding:16px 16px 20px;margin-bottom:22px}
+.perf{position:absolute;left:0;right:0;bottom:-9px;height:9px;
+  background-image:radial-gradient(circle at 5px 0,var(--canvas) 4.5px,transparent 5px);
+  background-size:12px 9px;background-repeat:repeat-x}
+.tick-eyebrow{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.26em;
+  font-size:11px;font-weight:600;color:var(--dim)}
+.dest{font-family:'Barlow Condensed';text-transform:uppercase;font-size:32px;line-height:1.05;
+  font-weight:700;margin:4px 0 10px;padding-right:60px}
+.tick-meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-family:'Barlow Condensed';
+  text-transform:uppercase;letter-spacing:.12em;font-size:12px;color:var(--dim);
+  border-top:1px solid var(--line);padding-top:9px}
+.tick-meta b{color:var(--olive);font-size:14px}
+.bar{height:6px;background:#DAD4C2;margin-top:14px;overflow:hidden}
+.fill{height:100%;background:var(--olive);transition:width .3s ease}
+.tally{display:flex;justify-content:space-between;font-size:12px;margin-top:7px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+
+.stamp{position:absolute;top:14px;right:10px;transform:rotate(-11deg);
+  font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.14em;font-size:15px;
+  font-weight:700;color:var(--rust);border:2.5px solid var(--rust);padding:5px 9px;
+  border-radius:3px;opacity:.85;animation:thud .35s cubic-bezier(.2,1.4,.5,1)}
+@keyframes thud{from{transform:rotate(-11deg) scale(1.7);opacity:0}to{transform:rotate(-11deg) scale(1);opacity:.85}}
+
+.cat{margin-bottom:18px}
+.cathead{display:flex;align-items:baseline;gap:8px;width:100%;background:transparent;border:none;
+  padding:0 0 7px;cursor:pointer;color:var(--ink)}
+.catname{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.16em;
+  font-size:13px;font-weight:700;color:var(--olive);white-space:nowrap}
+.leader{flex:1;border-bottom:1px dotted var(--line);transform:translateY(-3px)}
+.catcount{font-size:12px;color:var(--dim)}
+.caret{font-family:'IBM Plex Mono';font-size:14px;color:var(--dim);width:12px;text-align:right}
+
+.item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(185,178,156,.45)}
+.box{width:24px;height:24px;flex:none;border:1px solid var(--line);background:var(--card);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
+  color:#F2EEE1;padding:0}
+.item.packed .box{background:var(--olive);border-color:var(--olive)}
+.itembody{flex:1;min-width:0;cursor:pointer}
+.itemname{font-size:15.5px;line-height:1.25}
+.item.packed .itemname{text-decoration:line-through;color:var(--dim)}
+.itemnote{font-size:12.5px;color:var(--brass);margin-top:1px}
+.tag{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.12em;font-size:10px;
+  border:1px solid var(--line);padding:1px 4px;margin-left:6px;color:var(--dim);vertical-align:1px}
+.qty{display:flex;align-items:center;gap:2px;flex:none}
+.qty button{width:26px;height:26px;border:1px solid var(--line);background:transparent;
+  color:var(--dim);font-size:15px;line-height:1;cursor:pointer;padding:0;border-radius:2px}
+.qty span{width:26px;text-align:center;font-size:13px}
+.kill{background:none;border:none;color:var(--line);font-size:19px;cursor:pointer;padding:0 2px;flex:none}
+.kill:hover{color:var(--rust)}
+
+.empty{color:var(--dim);font-size:15px;padding:14px 0}
+.addbox{margin:26px 0 10px;padding-top:18px;border-top:1px solid var(--line)}
+.addbox .inp{margin-bottom:8px}
+.tailor{margin:6px 0 10px}
+.aimsg{font-size:13px;color:var(--olive);margin-top:8px;text-align:center}
+.aimsg.err{color:var(--rust)}
+
+.footer{display:flex;gap:8px;margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.footer .btn{flex:1;padding:11px 6px;font-size:12px;letter-spacing:.1em}
+
+.tripcard{border:1px solid var(--line);background:var(--card);padding:12px 13px;margin-bottom:10px}
+.tripmain{display:flex;align-items:baseline;gap:8px;width:100%;background:none;border:none;
+  padding:0;cursor:pointer;color:var(--ink)}
+.tripname{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.06em;
+  font-size:20px;font-weight:700;text-align:left}
+.tripcount{font-size:13px;color:var(--olive)}
+.tripmeta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:7px;font-size:12.5px;color:var(--dim)}
+.tripmeta button{background:none;border:none;color:var(--dim);font-family:'Barlow Condensed';
+  text-transform:uppercase;letter-spacing:.12em;font-size:11px;cursor:pointer;padding:0}
+.tripmeta button:hover{color:var(--rust)}
+.warn{margin-top:14px;font-size:13px;color:var(--rust)}
+
+.backup{display:flex;gap:8px;margin-bottom:10px}
+.backup .btn{flex:1;padding:11px 6px;font-size:12px;letter-spacing:.1em;text-align:center}
+.filelab{display:flex;align-items:center;justify-content:center;cursor:pointer}
+.filelab input{display:none}
+
+@media (prefers-reduced-motion:reduce){
+  .stamp{animation:none}
+  .fill{transition:none}
+}
+`}</style>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+
+</script>
+</body>
+</html>
