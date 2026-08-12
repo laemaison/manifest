@@ -1,0 +1,4 @@
+manifest-packing-list.jsx
+worker/node_modules/
+worker/.wrangler/
+.dev.vars
