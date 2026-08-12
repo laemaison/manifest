@@ -374,10 +374,12 @@ function buildItems(trip) {
     add("Invitation, schedule, venue address", "docs");
     add("Rehearsal or welcome party outfit", "clothes");
     add("Brunch or day-after outfit", "clothes");
-    add("Flats for dancing", "shoes");
+    add("Dress belt", "clothes");
+    add("Tie or bow tie", "clothes", formal > 1 ? 2 : 1);
+    add("Undershirts", "clothes", formal);
+    add("Collar stays and cufflinks", "misc");
+    add("Shoe shine sponge", "gear");
     add("Sewing kit and safety pins", "gear");
-    add("Double-sided fashion tape", "gear");
-    add("Heel protectors", "gear", 1, { note: "If the ceremony is on grass" });
     add("Blister kit", "health");
     add("Antacid", "health");
     add("Deodorant wipes", "toiletries");
@@ -394,6 +396,22 @@ function buildItems(trip) {
     add("Cash in small bills", "docs");
     add("Poncho", "gear");
     add("Folding chair or blanket", "gear");
+  }
+
+  /* ---------- cpap ---------- */
+  if (trip.cpap) {
+    add("CPAP machine", "health", 1, {
+      note: fly ? "Medical device, does not count as a carry-on" : "",
+    });
+    add("CPAP mask and headgear", "health");
+    add("CPAP hose", "health");
+    add("CPAP filters", "health", 2);
+    add("CPAP power brick and cord", "tech");
+    add("Extension cord", "tech", 1, { note: "Hotel outlets are never near the bed" });
+    add("Distilled water", "health", 1, {
+      note: fly ? "Buy it there, do not fly with it" : "",
+    });
+    add("Mask wipes", "toiletries");
   }
 
   /* ---------- door ---------- */
@@ -544,6 +562,7 @@ function TripSetup({ initial, onSave, onCancel }) {
   const [hiking, setHiking] = useState(!!initial?.hiking);
   const [water, setWater] = useState(!!initial?.water);
   const [dog, setDog] = useState(!!initial?.dog);
+  const [cpap, setCpap] = useState(!!initial?.cpap);
 
   const nights = end ? nightsBetween(start, end) : initial?.nights || 3;
   const camping = type === "camp";
@@ -567,6 +586,7 @@ function TripSetup({ initial, onSave, onCancel }) {
       hiking,
       water,
       dog,
+      cpap,
     });
 
   return (
@@ -674,6 +694,8 @@ function TripSetup({ initial, onSave, onCancel }) {
       <Switch on={water} onClick={() => setWater((v) => !v)}
         label="Beach, lake, or pool" hint="Swimsuits, dry bag, water shoes" />
       <Switch on={dog} onClick={() => setDog((v) => !v)} label="The dog is coming" />
+      <Switch on={cpap} onClick={() => setCpap((v) => !v)}
+        label="CPAP" hint="Machine, mask, hose, filters, extension cord" />
       <Switch on={laundry} onClick={() => setLaundry((v) => !v)}
         label="Laundry where I'm staying" hint="Cuts the clothing counts down" />
 
