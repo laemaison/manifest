@@ -21,10 +21,71 @@
   }
 </script>
 <style>
-  html,body{margin:0;padding:0;background:#D9D3C0;-webkit-text-size-adjust:100%}
+  /* Palette lives here rather than in the app's own stylesheet so the boot
+     screen is already themed and there is no light flash before React runs. */
+  :root{
+    color-scheme:light;
+    --ink:#1B2019;
+    --canvas:#D9D3C0;
+    --card:#F2EEE1;
+    --olive:#3E4A32;
+    --brass:#B8862B;
+    --rust:#8A3520;
+    --line:#B9B29C;
+    --dim:#6E6A5C;
+    --on-accent:#F2EEE1;
+    --track:#DAD4C2;
+    --hairline:rgba(185,178,156,.45);
+    --focus:rgba(62,74,50,.18);
+  }
+  /* Warm, low-glare dark. Olive and brass are lifted so they stay legible,
+     and text on an accent flips to the dark canvas colour. */
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      color-scheme:dark;
+      --ink:#E9E3D1;
+      --canvas:#16180F;
+      --card:#20231A;
+      --olive:#9DAE7E;
+      --brass:#D9A93F;
+      --rust:#D9714F;
+      --line:#3B3F31;
+      --dim:#9C977F;
+      --on-accent:#16180F;
+      --track:#2C3024;
+      --hairline:rgba(156,151,127,.28);
+      --focus:rgba(157,174,126,.25);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --ink:#E9E3D1;
+    --canvas:#16180F;
+    --card:#20231A;
+    --olive:#9DAE7E;
+    --brass:#D9A93F;
+    --rust:#D9714F;
+    --line:#3B3F31;
+    --dim:#9C977F;
+    --on-accent:#16180F;
+    --track:#2C3024;
+    --hairline:rgba(156,151,127,.28);
+    --focus:rgba(157,174,126,.25);
+  }
+  html,body{margin:0;padding:0;background:var(--canvas);-webkit-text-size-adjust:100%}
   #root{min-height:100vh}
-  .boot{font-family:system-ui,sans-serif;color:#6E6A5C;text-align:center;padding-top:80px;font-size:15px}
+  .boot{font-family:system-ui,sans-serif;color:var(--dim);text-align:center;padding-top:80px;font-size:15px}
 </style>
+<script>
+  // Apply the saved override before first paint, or the page flashes the
+  // system theme first.
+  (function () {
+    try {
+      var t = localStorage.getItem("manifest:theme");
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  })();
+</script>
 <script>/**
  * @license React
  * react.production.min.js
@@ -341,6 +402,35 @@ const {
    ============================================================ */
 
 const KEY = "manifest:trips:v2";
+const THEME_KEY = "manifest:theme";
+const THEMES = [["system", "Auto"], ["light", "Light"], ["dark", "Dark"]];
+// Kept in sync with the :root palettes in the document head.
+const THEME_COLOR = {
+  light: "#D9D3C0",
+  dark: "#16180F"
+};
+const systemPrefersDark = () => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+function readTheme() {
+  try {
+    const t = localStorage.getItem(THEME_KEY);
+    return t === "light" || t === "dark" ? t : "system";
+  } catch (e) {
+    return "system";
+  }
+}
+function applyTheme(pref) {
+  const root = document.documentElement;
+  const forced = pref === "light" || pref === "dark";
+  if (forced) root.dataset.theme = pref;else delete root.dataset.theme;
+  try {
+    if (forced) localStorage.setItem(THEME_KEY, pref);else localStorage.removeItem(THEME_KEY);
+  } catch (e) {}
+  // The address bar / task switcher colour has to be set from JS, since it
+  // cannot read a CSS variable.
+  const resolved = forced ? pref : systemPrefersDark() ? "dark" : "light";
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", THEME_COLOR[resolved]);
+}
 const CATS = [["docs", "Documents & money"], ["clothes", "Clothing"], ["shoes", "Footwear"], ["toiletries", "Toiletries"], ["health", "Health kit"], ["tech", "Tech & power"], ["gear", "Gear"], ["camp", "Camp & sleep"], ["food", "Food & water"], ["car", "Car"], ["misc", "Everything else"], ["carry", "Personal item"], ["wear", "Wearing out"], ["door", "Door check"]];
 const CAT_LABEL = Object.fromEntries(CATS);
 const TYPES = [["camp", "Camping"], ["vac", "Vacation"]];
@@ -1232,7 +1322,17 @@ function App() {
   const [view, setView] = useState("loading");
   const [editing, setEditing] = useState(false);
   const [saveState, setSaveState] = useState("ok");
+  const [theme, setTheme] = useState(readTheme);
   const firstLoad = useRef(true);
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== "system" || !window.matchMedia) return;
+    // On Auto, follow the system if it flips while the app is open.
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => applyTheme("system");
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [theme]);
   useEffect(() => {
     (async () => {
       const t = await loadTrips();
@@ -1354,7 +1454,17 @@ function App() {
       if (f) importTrips(f, data => setTrips(v => mergeTripSets(v, data)));
       e.target.value = "";
     }
-  }))), saveState === "none" && /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "appearance"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "lab"
+  }, "Appearance"), /*#__PURE__*/React.createElement("div", {
+    className: "chips"
+  }, THEMES.map(([id, label]) => /*#__PURE__*/React.createElement(Chip, {
+    key: id,
+    on: theme === id,
+    onClick: () => setTheme(id)
+  }, label)))), saveState === "none" && /*#__PURE__*/React.createElement("div", {
     className: "warn"
   }, "Saving is off in this view, so the list lasts for this session only.")));
 }
@@ -1368,14 +1478,7 @@ function Styles() {
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 .wrap {
-  --ink:#1B2019;
-  --canvas:#D9D3C0;
-  --card:#F2EEE1;
-  --olive:#3E4A32;
-  --brass:#B8862B;
-  --rust:#8A3520;
-  --line:#B9B29C;
-  --dim:#6E6A5C;
+  /* Palette is defined on :root in the document head. */
   background:var(--canvas);
   color:var(--ink);
   font-family:'Barlow',system-ui,sans-serif;
@@ -1396,7 +1499,7 @@ function Styles() {
   font-size:12px;font-weight:600;color:var(--dim);margin:18px 0 6px}
 .inp{width:100%;background:var(--card);border:1px solid var(--line);border-radius:2px;
   padding:11px 12px;font-family:'Barlow';font-size:16px;color:var(--ink);outline:none}
-.inp:focus{border-color:var(--olive);box-shadow:0 0 0 2px rgba(62,74,50,.18)}
+.inp:focus{border-color:var(--olive);box-shadow:0 0 0 2px var(--focus)}
 .row2{display:flex;gap:10px;margin-top:4px}
 .row2>div{flex:1}
 
@@ -1409,7 +1512,7 @@ function Styles() {
 .typebtn{flex:1;font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.14em;
   font-size:16px;font-weight:700;padding:16px 8px;border:1px solid var(--line);
   background:var(--card);color:var(--dim);border-radius:2px;cursor:pointer}
-.typebtn.on{background:var(--olive);border-color:var(--olive);color:#F2EEE1}
+.typebtn.on{background:var(--olive);border-color:var(--olive);color:var(--on-accent)}
 
 .branch{border-left:2px solid var(--brass);padding-left:13px;margin-top:6px}
 
@@ -1418,7 +1521,7 @@ function Styles() {
 .chip{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.1em;font-size:13px;
   font-weight:600;padding:7px 12px;border:1px solid var(--line);background:transparent;
   color:var(--dim);border-radius:2px;cursor:pointer;transition:background .12s,color .12s}
-.chip.on{background:var(--olive);border-color:var(--olive);color:#F2EEE1}
+.chip.on{background:var(--olive);border-color:var(--olive);color:var(--on-accent)}
 .chip:focus-visible,.btn:focus-visible,.box:focus-visible,.typebtn:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 
 .toggle{display:flex;gap:11px;align-items:flex-start;width:100%;text-align:left;margin-top:14px;
@@ -1426,13 +1529,13 @@ function Styles() {
 .toggle em{display:block;font-style:normal;font-size:13px;color:var(--dim)}
 .tbox{width:22px;height:22px;flex:none;border:1px solid var(--line);background:var(--card);
   display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--olive)}
-.toggle.on .tbox{background:var(--olive);color:#F2EEE1;border-color:var(--olive)}
+.toggle.on .tbox{background:var(--olive);color:var(--on-accent);border-color:var(--olive)}
 
 .actions{display:flex;gap:8px;margin:24px 0 8px}
 .btn{font-family:'Barlow Condensed';text-transform:uppercase;letter-spacing:.14em;font-size:14px;
   font-weight:600;padding:12px 16px;border:1px solid var(--olive);background:transparent;
   color:var(--olive);border-radius:2px;cursor:pointer}
-.btn.primary{background:var(--olive);color:#F2EEE1}
+.btn.primary{background:var(--olive);color:var(--on-accent)}
 .btn.ghost{border-color:var(--line);color:var(--dim)}
 .btn.wide{width:100%}
 .btn.brass{border-color:var(--brass);color:var(--brass)}
@@ -1451,7 +1554,7 @@ function Styles() {
   text-transform:uppercase;letter-spacing:.12em;font-size:12px;color:var(--dim);
   border-top:1px solid var(--line);padding-top:9px}
 .tick-meta b{color:var(--olive);font-size:14px}
-.bar{height:6px;background:#DAD4C2;margin-top:14px;overflow:hidden}
+.bar{height:6px;background:var(--track);margin-top:14px;overflow:hidden}
 .fill{height:100%;background:var(--olive);transition:width .3s ease}
 .tally{display:flex;justify-content:space-between;font-size:12px;margin-top:7px;
   letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
@@ -1471,10 +1574,10 @@ function Styles() {
 .catcount{font-size:12px;color:var(--dim)}
 .caret{font-family:'IBM Plex Mono';font-size:14px;color:var(--dim);width:12px;text-align:right}
 
-.item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(185,178,156,.45)}
+.item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--hairline)}
 .box{width:24px;height:24px;flex:none;border:1px solid var(--line);background:var(--card);
   display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
-  color:#F2EEE1;padding:0}
+  color:var(--on-accent);padding:0}
 .item.packed .box{background:var(--olive);border-color:var(--olive)}
 .itembody{flex:1;min-width:0;cursor:pointer}
 .itemname{font-size:15.5px;line-height:1.25}
@@ -1509,6 +1612,8 @@ function Styles() {
 .warn{margin-top:14px;font-size:13px;color:var(--rust)}
 
 .backup{display:flex;gap:8px;margin-bottom:10px}
+.appearance{margin-top:18px}
+.appearance .lab{display:block;margin-bottom:6px}
 .backup .btn{flex:1;padding:11px 6px;font-size:12px;letter-spacing:.1em;text-align:center}
 .filelab{display:flex;align-items:center;justify-content:center;cursor:pointer}
 .filelab input{display:none}
