@@ -36,5 +36,13 @@ To regenerate the icons after a colour change: `node build/gen-icons.js`.
 - Trips live in `localStorage`, which is per-origin **and per-device**. Moving
   to a new domain, or to your phone, needs *Save a backup* then *Restore a
   backup*. There is no sync.
-- Bump `VERSION` in `sw.js` when shipping a change, or returning visitors keep
-  the cached old shell.
+- You do **not** need to bump `VERSION` in `sw.js` for a normal change.
+  Navigations are network-first, so a new `index.html` is picked up on the next
+  online load and rewritten into the cache; the cached copy is only used when
+  the network fails. Bump `VERSION` only when changing a *cache-first* asset —
+  the icons or `app.webmanifest` — or when changing `sw.js`'s own caching logic.
+- Themes: the palette is on `:root` in the document head, not in the app's
+  stylesheet, so the boot screen is themed and a saved override can apply
+  before first paint. Any new colour belongs in **both** the light and dark
+  blocks — a hardcoded hex will look correct in one theme and wrong in the
+  other.
